@@ -2,17 +2,21 @@
 
 This file shows how every building block of a "good prompt" can be **varied and
 customized** using this library's design. It walks through the 12 blocks from the
-README's GOOD PROMPT framework, each with concrete examples.
+README's GOOD PROMPT framework.
+
+**One consistent example is used throughout:** a *code review of a Python login
+endpoint*, built from `templates/three-column.md`. Each block section shows the
+part of that example it controls, and how to vary it for a different prompt.
 
 ## The two mechanisms your design gives you
 
-Everything below uses just two composition features:
+Two composition features do all the work:
 
 1. **Value substitution** — `{{var}}` becomes a value from a values file or `--var`.
 2. **Variable-driven includes** — `>> components/path/{{var}}.md` picks *which*
    existing component file to inline.
 
-The reference template is `templates/three-column.md`:
+The reference template `templates/three-column.md`:
 
 ```markdown
 # Purpose
@@ -34,178 +38,211 @@ The reference template is `templates/three-column.md`:
 {{success_criteria}}
 ```
 
-Same template, many prompts. Below, each block shows how to vary it.
+## The consistent example: review this login endpoint
+
+Values file `examples/review.values.yaml` (shipped in the repo):
+
+```yaml
+role: senior-engineer
+tone: professional-precise
+objective: Review the login endpoint for correctness, security, and testability
+audience: The pull-request author
+context: We are refactoring our Python FastAPI service to add rate limiting
+input: |-
+  @app.post("/login")
+  def login(username: str, password: str):
+      user = db.query(User).filter(User.name == username).first()
+      if user and check_password(password, user.hash):
+          return {"token": gen_token(user)}
+      raise HTTPException(401, "bad credentials")
+sources: https://example.com/style-guide, https://example.com/api-auth-cheatsheet
+example_set: code-review
+constraints: prioritize correctness over style; do not suggest unrelated refactors
+safety: safety-accuracy
+format: code-review
+success_criteria: |-
+  - A one-line verdict (APPROVE / REQUEST CHANGES / COMMENT)
+  - Issues ordered by severity with locations
+  - A concrete fix with code for each issue
+  - No claims not supported by the shown code
+```
+
+Render it:
+
+```bash
+python3 bin/render.py templates/three-column.md --values examples/review.values.yaml
+```
+
+Output inlines every component and fills every slot. Below, each block shows how
+to change **that one thing** to get a different prompt — always zero template edits.
 
 ---
 
-## PURPOSE
+## PURPOSE — why this prompt exists
 
-### 1. Role — vary by include selection
+### 1. Role — vary by include selection (`>> roles/{{role}}.md`)
 
-`{{role}}` selects *which* role file to inline. Add a file per role, then switch
-with a value.
-
-```
-components/roles/
-├── expert-writer.md
-├── senior-engineer.md
-└── data-analyst.md
-```
+`{{role}}` chooses *which* role file is inlined. In our example:
 
 ```yaml
-# values: role chooses the file
-role: senior-engineer     # → inlines components/roles/senior-engineer.md
+role: senior-engineer   # → inlines components/roles/senior-engineer.md
 ```
+produces:
+> "You are a senior software engineer who writes clean, maintainable code..."
+
+Swap the role and the whole persona changes:
+
 ```bash
-python3 bin/render.py templates/three-column.md --var role=data-analyst
+python3 bin/render.py templates/three-column.md --values examples/review.values.yaml \
+  --var role=data-analyst
 ```
-
-**To add a new role** (one `components/roles/<name>.md`), since includes
-look up `components/roles/<role>.md`:
-
-```
-components/roles/legal-reviewer.md   # written once, reusable everywhere
-```
-then `role: legal-reviewer` selects it.
+Now the "review" is a data-correctness audit instead of a code review, with no
+template change. Add any new role as one file under `components/roles/`.
 
 ### 2. Objective — vary by value
 
-The objective is prose, so it's a plain value:
+The objective is one-off prose, so it's a value:
+
 ```yaml
-objective: Write a persuasive cold email to re-engage a lapsed customer
+objective: Review the login endpoint for correctness, security, and testability
 ```
-Override per run without a new file:
+Override without a new file:
 ```bash
---var objective="Summarize this PR for a release note"
+--var objective="Review only the security aspects of this endpoint"
 ```
 
 ### 3. Audience — vary by value
 
-Audience changes tone/depth; it's a value:
+Audience sets how the review is pitched:
 ```yaml
-audience: Busy purchasing managers
+audience: The pull-request author
 ```
 ```bash
---var audience="non-technical stakeholders"
+--var audience="a junior developer new to FastAPI"
 ```
 
-### 4. Tone — vary by include selection
+### 4. Tone — vary by include selection (`>> styles/{{tone}}.md`)
 
-Like Role, `{{tone}}` selects a voice file:
-```
-components/styles/
-├── friendly-clear.md
-└── professional-precise.md
-```
+`{{tone}}` selects a voice file:
 ```yaml
-tone: professional-precise     # → inlines components/styles/professional-precise.md
+tone: professional-precise   # → inlines components/styles/professional-precise.md
 ```
-Add a new voice by dropping `components/styles/<name>.md` once.
+```bash
+--var tone=friendly-clear
+```
+Add a voice once at `components/styles/<name>.md` and reuse it anywhere.
 
 ---
 
-## INFORMATION
+## INFORMATION — what the model needs to work with
 
 ### 5. Context — vary by value
 
-Background is unmetered prose; a value:
+Background is value prose:
 ```yaml
-context: We sell an analytics platform the customer trialed 6 months ago
+context: We are refactoring our Python FastAPI service to add rate limiting
+```
+```bash
+--var context="This is a greenfield service about to launch; nothing is in prod yet"
 ```
 
 ### 6. Input — vary by value (multi-line)
 
-Input is often a code block, CSV, or document. Multi-line values work via JSON or
-YAML block scalars:
+Input is the code/data to process. Multi-line values use YAML block scalars or JSON:
 ```yaml
-# YAML literal block
 input: |-
-  Customer: Acme Corp
-  Contact: Priya (Head of Ops)
-  Prior trial: used the dashboard for 2 weeks
+  @app.post("/login")
+  def login(username: str, password: str):
+      ...
 ```
-or JSON for code:
+or the same as JSON:
 ```json
-{ "input": "def fetch(url):\n    import requests\n    return requests.get(url).json()\n" }
+{ "input": "@app.post(\"/login\")\ndef login(...): ..." }
+```
+Change the input to review a *different* function and nothing else changes:
+```bash
+python3 bin/render.py templates/three-column.md --values examples/review.values.yaml \
+  --var objective="Review this signup handler" \
+  --var input="def signup(email: str):\n    ..."
 ```
 
 ### 7. Sources — vary by value
 
-A list/links; a value:
+References/links are a value:
 ```yaml
-sources: https://example.com/pricing, https://example.com/case-studies
+sources: https://example.com/style-guide, https://example.com/api-auth-cheatsheet
+```
+```bash
+--var sources="https://owasp.org/api-security, internal wiki: API patterns"
 ```
 
-### 8. Examples — vary by include selection (few-shot)
+### 8. Examples — vary by include selection (`>> examples/{{example_set}}.md`)
 
 Each few-shot set is a component file; `{{example_set}}` picks one:
-```
-components/examples/
-└── sales-outreach.md
-```
 ```yaml
-example_set: sales-outreach   # → inlines components/examples/sales-outreach.md
+example_set: code-review   # → inlines components/examples/code-review.md
 ```
-Add a new few-shot set as one file and reuse it across many prompts.
+Add a new few-shot set as one file (e.g. `components/examples/security-review.md`)
+and any review can adopt it via `example_set: security-review`.
 
 ---
 
-## CONTROL
+## CONTROL — how the model must behave and produce
 
 ### 9. Constraints — vary by value or include
 
 Constraints are usually short enough to be a value:
 ```yaml
-constraints: under 150 words, no pushy language
+constraints: prioritize correctness over style; do not suggest unrelated refactors
 ```
-But if you have a *standard, reused* constraint set, make it a component file and
-select it via include, exactly like safety:
-```
-components/rules/constraints.md
-```
+If a constraint set is reused everywhere, promote it to a file and select it via
+include instead:
 ```markdown
 >> components/rules/{{constraints}}.md
 ```
-with `constraints: constraints`. You choose per block whether the variation is
-inline (value) or shared (include) — the design supports both.
-
-### 10. Safety & Accuracy — vary by include selection
-
-Safety rules are shared standards, so they live as files and are selected:
+```yaml
+constraints: constraints   # → inlines components/rules/constraints.md
 ```
-components/rules/
-├── safety-accuracy.md
-└── constraints.md
-```
+You pick per block: one-off → value, shared → include. Both are supported.
+
+### 10. Safety & Accuracy — vary by include selection (`>> rules/{{safety}}.md`)
+
+Safety rules are shared standards, so they live as files:
 ```yaml
 safety: safety-accuracy   # → inlines components/rules/safety-accuracy.md
 ```
+Any review automatically carries the shared rules. Add a stricter set once
+(`components/rules/safety-accuracy-strict.md`) and switch with
+`safety: safety-accuracy-strict`.
 
-### 11. Output Format — vary by include selection
+### 11. Output Format — vary by include selection (`>> formats/{{format}}.md`)
 
-Formats are shared, reused structures; select one via `{{format}}`:
-```
-components/formats/
-├── exec-summary.md
-└── success-checklist.md
-```
+Formats are shared structures:
 ```yaml
-format: exec-summary   # → inlines components/formats/exec-summary.md
+format: code-review   # → inlines components/formats/code-review.md
 ```
-Add a new format as one file (e.g. `components/formats/code-review.md`) and any
-prompt can adopt it by setting `format: code-review`.
+This example's format forces: Verdict → Issues → Fixes → Praise. Switching format
+re-shapes the entire review:
+```bash
+python3 bin/render.py templates/three-column.md --values examples/review.values.yaml \
+  --var objective="Summarize this endpoint for a release note" \
+  --var input="login endpoint: verifies password, issues JWT" \
+  --var format=exec-summary
+```
+Same template, now an executive summary instead of a review — only the format and
+task changed.
 
 ### 12. Success Criteria — vary by value (multi-line checklist)
 
-A checklist; a multi-line value:
+The completion checklist is a multi-line value:
 ```yaml
 success_criteria: |-
-  - A clear subject line
-  - One call to action
-  - Personalization using the customer's name and context
-  - No claims we cannot support
+  - A one-line verdict (APPROVE / REQUEST CHANGES / COMMENT)
+  - Issues ordered by severity with locations
+  - A concrete fix with code for each issue
+  - No claims not supported by the shown code
 ```
-For *standard* criteria, reuse the shared checklist via an include instead:
+For a standard, reused checklist, pull a shared component instead:
 ```markdown
 >> components/formats/success-checklist.md
 ```
@@ -214,23 +251,50 @@ For *standard* criteria, reuse the shared checklist via an include instead:
 
 ## Worked example: the same template, four different prompts
 
-The full 12-area example ships as `examples/full-prompt.values.yaml` and renders with:
+The base code-review example runs as shipped:
 
 ```bash
-python3 bin/render.py templates/three-column.md --values examples/full-prompt.values.yaml
+python3 bin/render.py templates/three-column.md --values examples/review.values.yaml
 ```
 
-Change one or two values and you get a different prompt with **zero** template edits:
+Change only **values** (or which component a variable selects) and you get a
+completely different prompt with **zero** template edits. Here are four variations
+of the exact same template:
 
 ```bash
-# same role/style, different objective + audience + input
-python3 bin/render.py templates/three-column.md \
-  --values examples/full-prompt.values.yaml \
-  --var role=data-analyst --var tone=professional-precise \
-  --var objective="Summarize Q1 metrics for the exec team" \
-  --var input="Q1 revenue up 12%, users up 8%, churn flat" \
+# (1) As shipped — strict code review of the login endpoint
+python3 bin/render.py templates/three-column.md --values examples/review.values.yaml
+
+# (2) Same engineer role, but focus on security only, for a new input
+python3 bin/render.py templates/three-column.md --values examples/review.values.yaml \
+  --var objective="Review only the security aspects of this endpoint" \
+  --var input="def signup(email: str):\n    ..." \
+  --var sources="https://owasp.org/api-security"
+
+# (3) Different role, tone, and output — a friendly summary for executives
+python3 bin/render.py templates/three-column.md --values examples/review.values.yaml \
+  --var role=data-analyst --var tone=friendly-clear \
+  --var objective="Summarize the login endpoint for the exec team" \
+  --var input="POST /login verifies the password and issues a JWT; rate limiting added" \
   --var format=exec-summary
+
+# (4) Same template, a persuasive sales-writer task instead of a review
+python3 bin/render.py templates/three-column.md --values examples/review.values.yaml \
+  --var role=expert-writer --var tone=friendly-clear \
+  --var objective="Write a cold email to re-engage a lapsed customer" \
+  --var audience="Busy purchasing managers" \
+  --var context="We sell an analytics platform the customer trialed 6 months ago" \
+  --var input="Customer: Acme Corp; Contact: Priya (Head of Ops)" \
+  --var example_set=sales-outreach --var format=exec-summary \
+  --var constraints="under 150 words, no pushy language"
 ```
+
+One template, four very different prompts — that is the payoff of values-driven
+composability: the building blocks stay single-sourced (`components/`), and only
+the per-invocation inputs and selected components change.
+
+That is the composability model: **one template, many prompts**, produced by
+varying per-block values and/or selecting different component files.
 
 ---
 

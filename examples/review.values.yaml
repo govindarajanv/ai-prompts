@@ -1,0 +1,28 @@
+# Consistent worked example: code review of a Python API endpoint
+# Renders with: python3 bin/render.py templates/three-column.md --values examples/review.values.yaml
+role: senior-engineer
+tone: professional-precise
+objective: Review the login endpoint for correctness, security, and testability
+audience: The pull-request author
+
+# INFORMATION
+context: We are refactoring our Python FastAPI service to add rate limiting
+input: |-
+  @app.post("/login")
+  def login(username: str, password: str):
+      user = db.query(User).filter(User.name == username).first()
+      if user and check_password(password, user.hash):
+          return {"token": gen_token(user)}
+      raise HTTPException(401, "bad credentials")
+sources: https://example.com/style-guide, https://example.com/api-auth-cheatsheet
+example_set: code-review
+
+# CONTROL
+constraints: prioritize correctness over style; do not suggest unrelated refactors
+safety: safety-accuracy
+format: code-review
+success_criteria: |-
+  - A one-line verdict (APPROVE / REQUEST CHANGES / COMMENT)
+  - Issues ordered by severity with locations
+  - A concrete fix with code for each issue
+  - No claims not supported by the shown code
