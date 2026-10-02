@@ -1,0 +1,5 @@
+{
+  "language": "python",
+  "criteria": "correctness, error handling, clarity",
+  "code": "def fetch(url):\n    import requests\n    r = requests.get(url)\n    return r.json()\n"
+}

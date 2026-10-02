@@ -1,0 +1,8 @@
+# Generated output from bin/render.py
+rendered/
+# Ignore ad-hoc renders anywhere...
+*.rendered.md
+# ...but keep the checked-in reference samples under examples/rendered/
+!examples/rendered/
+!examples/rendered/*.rendered.md
+__pycache__/

@@ -1,0 +1,4 @@
+# Example values for prompts/writing/blog-post.md
+# Usage: python3 bin/render.py prompts/writing/blog-post.md --values examples/blog.values.yaml --var topic=... --var audience=...
+topic: "Getting Started with Containerization"
+audience: "beginner developers new to Docker"
