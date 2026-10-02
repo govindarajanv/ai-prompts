@@ -1,0 +1,24 @@
+# -- PURPOSE ---------------------------------------------------------------
+role: expert-writer
+objective: Write a persuasive cold email to re-engage a lapsed customer
+audience: Busy purchasing managers
+tone: friendly-clear
+
+# -- INFORMATION -----------------------------------------------------------
+context: We sell an analytics platform the customer trialed 6 months ago
+input: >-
+  Customer: Acme Corp
+  Contact: Priya (Head of Ops)
+  Prior trial: used the dashboard for 2 weeks
+sources: https://example.com/pricing, https://example.com/case-studies
+example_set: sales-outreach
+
+# -- CONTROL ---------------------------------------------------------------
+constraints: under 150 words, no pushy language
+safety: safety-accuracy
+format: exec-summary
+success_criteria: |-
+  - A clear subject line
+  - One call to action [CTA]
+  - Personalization using the customer's name and context
+  - No claims we cannot support

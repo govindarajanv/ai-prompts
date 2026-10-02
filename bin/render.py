@@ -44,7 +44,11 @@ def find_root(start_dir):
 
 
 def load_values(path):
-    """Load a values file; supports JSON or simple 'key: value' lines."""
+    """Load a values file; supports JSON or simple 'key: value' lines.
+
+    Also folds YAML block scalars: a value of ``|-`` (literal block) or
+    ``>-`` (folded block) collects the indented lines that follow it.
+    """
     if path is None:
         return {}
     text = Path(path).read_text()
@@ -54,13 +58,30 @@ def load_values(path):
     if text.startswith("{"):
         data = json.loads(text)
         return data if isinstance(data, dict) else {}
+
     values = {}
-    for raw in text.splitlines():
-        line = raw.split("#", 1)[0].strip()
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i].split("#", 1)[0].rstrip()
         if not line or ":" not in line:
+            i += 1
             continue
-        key, _, val = line.partition(":")
-        values[key.strip()] = val.strip().strip("'\"")
+        key_raw, _, val_raw = line.partition(":")
+        key = key_raw.strip()
+        val = val_raw.strip().strip("'\"")
+        # YAML literal/folded block scalar
+        if val in ("|-", ">-"):
+            collect = []
+            i += 1
+            while i < len(lines) and lines[i][:1] in (" ", "\t"):
+                collect.append(lines[i].lstrip())
+                i += 1
+            body = "\n".join(collect)
+            values[key] = body if val == "|-" else " ".join(body.split())
+            continue
+        values[key] = val
+        i += 1
     return values
 
 
@@ -78,7 +99,7 @@ def resolve_include(rel, prompt_dir, root_dir):
     return (root_dir / rel).resolve()  # for consistent missing-reporting
 
 
-def expand_includes(text, prompt_dir, root_dir, seen, depth=0):
+def expand_includes(text, prompt_dir, root_dir, values, seen, depth=0):
     """Recursively inline '>> path' includes. Returns (resolved_text, missing)."""
     if depth > 50:
         raise CycleError("include nesting too deep (possible cycle)")
@@ -87,6 +108,9 @@ def expand_includes(text, prompt_dir, root_dir, seen, depth=0):
 
     def repl(match):
         rel = match.group(1)
+        # Substitute {{variables}} inside the include path so a values file can
+        # choose which component to inline (e.g. ">> styles/{{tone}}.md").
+        rel = substitute(rel, values)
         target = resolve_include(rel, prompt_dir, root_dir)
         if not target.exists():
             missing.append(rel)
@@ -95,7 +119,8 @@ def expand_includes(text, prompt_dir, root_dir, seen, depth=0):
             raise CycleError(f"include cycle at '{rel}'")
         content = target.read_text()
         resolved, sub_missing = expand_includes(
-            content, target.parent, root_dir, seen | {str(target)}, depth + 1
+            content, target.parent, root_dir, values,
+            seen | {str(target)}, depth + 1
         )
         missing.extend(sub_missing)
         return resolved
@@ -104,7 +129,7 @@ def expand_includes(text, prompt_dir, root_dir, seen, depth=0):
     if n == 0:
         return text, missing
     if n and depth < 50:
-        text, more = expand_includes(text, prompt_dir, root_dir, seen, depth + 1)
+        text, more = expand_includes(text, prompt_dir, root_dir, values, seen, depth + 1)
         missing.extend(more)
     return text, missing
 
@@ -150,7 +175,7 @@ def main():
     if not args.keep_frontmatter:
         text = FRONTMATTER.sub("", text, count=1)
 
-    text, _ = expand_includes(text, prompt_dir, root_dir, {str(prompt_path)})
+    text, _ = expand_includes(text, prompt_dir, root_dir, values, {str(prompt_path)})
     text = substitute(text, values).strip() + "\n"
 
     undefined = sorted(set(VARIABLE.findall(text)))

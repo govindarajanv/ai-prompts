@@ -102,7 +102,11 @@ A line that starts with `>>` at column 0 inlines the contents of another file:
   matter which sub-folder a prompt lives in. The prompt's own directory is tried as
   a fallback for local snippets.
 - Includes are **recursive** (a component can include another) with cycle protection.
-- Includes who missing files are left in place with a `<!-- missing -->` hint.
+- Include paths are **variable-driven**: `>> components/roles/{{role}}.md` inlines the
+  file named by the `role` value (e.g. `expert-writer` → `expert-writer.md`). This is
+  what lets one template *compose different building blocks* per invocation, not just
+  fill different values.
+- Includes whose files are missing are left in place with a `<!-- missing -->` hint.
 - Editor note: extensions like VS Code/Cursor are fine with these lines; the
   renderer turns them into real content at composition time.
 
@@ -153,8 +157,12 @@ What it does:
 
 1. **Strips YAML frontmatter** by default (so the output is clean to paste),
    unless `--keep-frontmatter`.
-2. **Inlines all `>>` includes** recursively.
-3. **Substitutes `{{variables}}`** from the values file and CLI flags.
+2. **Inlines all `>>` includes** recursively. Include paths may themselves contain
+   `{{variables}}` — e.g. `>> components/roles/{{role}}.md` — so a single template
+   can select *which* component to inline based on the values supplied.
+3. **Substitutes `{{variables}}`** from the values file and CLI flags. Values files
+   support JSON, simple `key: value` lines, and YAML block scalars (`|-`/`>-`) for
+   multi-line inputs like code or data.
 4. **Prints to stdout** — redirect to `rendered/` or pipe into a pager/clipboard.
 
 Because output goes to stdout, it's trivial to build on later: write to a file,
